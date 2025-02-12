@@ -2,6 +2,8 @@
 
 This project demonstrates the application of Hypothesis Testing including Normality Test, T-Test, Chi-Square Test etc. to analyze relationships between variables of medical insurance dataset. The results of the hypothesis conducted provide great insights about the distribution of medical charges among diffent bmi categories, whether gender a significant factor in patients over medical charges and much more. 
 
+<img src=".assets\infographic.png" width="900" height="580">
+
 # ❔Questions we conducted for Hypothesis:
 
 - Is there a statistically significant difference between the population medical charges and sample mean charges based on BMI Category? **(ONE-SAMPLE T-TEST)**
