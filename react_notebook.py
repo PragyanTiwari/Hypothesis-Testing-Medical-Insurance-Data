@@ -40,12 +40,13 @@ def _():
     from scipy import stats
     import statsmodels.api as sm
     import warnings
+    import altair as alt
 
     # configuration
     warnings.filterwarnings("ignore", category=FutureWarning)
     sns.set_style("whitegrid")
     sns.set_context("notebook", font_scale=1.13, rc={"lines.linewidth": 3})
-    return np, pd, stats
+    return alt, np, pd, stats
 
 
 @app.cell
@@ -70,7 +71,7 @@ def _(mo, pd, stats):
         Performs the Shapiro-Wilk Normality Test to check whether 
         the given data follows normal distribution of not.
         """
-    
+
         statistic,p_value = stats.shapiro(x)
         if p_value > 0.05:
             print(f"{repr} : The data is normally distributed")
@@ -92,11 +93,9 @@ def _(mo):
 
 
 @app.cell
-def _(df, mo):
+def _(alt, df, mo):
     # frequency fo each category
     print(df['bmi_category'].value_counts())
-
-    import altair as alt
 
     chart = alt.Chart(df).mark_bar().encode(
         x=alt.X('bmi_category:N', title='BMI Category'),
@@ -114,7 +113,7 @@ def _(df, mo):
     )
 
     mo.ui.altair_chart(chart, label="BMI Category Distribution").center()
-    return (alt,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -139,7 +138,7 @@ def _(df, mo, shapiro_normality_test):
         # shapiro normality test for obesity charges
         shapiro_normality_test(obesity_charges,"obesity") 
 
-    return
+    return normalweight_charges, obesity_charges, overweight_charges
 
 
 @app.cell(hide_code=True)
@@ -181,33 +180,48 @@ def _(mo, np, pd, stats):
         return bootstrap_samples
 
     mo.show_code()
-    return
+    return (get_bootstrap_samples,)
 
 
 @app.cell
-def _(alt, mo, np, pd):
-    np.random.seed(42)
+def _(
+    alt,
+    get_bootstrap_samples,
+    normalweight_charges,
+    obesity_charges,
+    overweight_charges,
+    pd,
+):
+    # get bootstrap samples for the charges based on bmi category
+    normalweight_bootstrap_samples = get_bootstrap_samples(normalweight_charges,3000)
 
-    # Generating Data
-    source = pd.DataFrame({
-        'Trial A': np.random.normal(0, 0.8, 1000),
-        'Trial B': np.random.normal(-2, 1, 1000),
-        'Trial C': np.random.normal(3, 2, 1000)
+    overweight_bootstrap_samples = get_bootstrap_samples(overweight_charges,3000)
+
+    obesity_bootstrap_samples = get_bootstrap_samples(obesity_charges,3000)
+
+
+    # Create a combined DataFrame
+    sdf = pd.DataFrame({
+        'value': normalweight_bootstrap_samples.tolist() + 
+                 overweight_bootstrap_samples.tolist() + 
+                 obesity_bootstrap_samples.tolist(),
+        'category': ['normal weight'] * len(normalweight_bootstrap_samples) + 
+                    ['over weight'] * len(overweight_bootstrap_samples) + 
+                    ['obesity'] * len(obesity_bootstrap_samples)
     })
 
-    h_chart = alt.Chart(source).transform_fold(
-        ['Trial A', 'Trial B', 'Trial C'],
-        as_=['Experiment', 'Measurement']
-    ).mark_bar(
-        opacity=0.3,
-        binSpacing=0
-    ).encode(
-        alt.X('Measurement:Q').bin(maxbins=100),
-        alt.Y('count()').stack(None),
-        alt.Color('Experiment:N')
+    # Create the histogram
+    schart = alt.Chart(sdf).mark_bar(opacity=0.5, stroke='black').encode(
+        alt.X('value:Q', bin=alt.Bin(maxbins=30), title='Value'),
+        alt.Y('count()', stack=None, title='Frequency'),
+        alt.Color('category:N', title='BMI Category')
+    ).properties(
+        width=600,
+        height=300,
+        title='Bootstrapped Samples for each BMI Category'
     )
 
-    mo.ui.altair_chart(h_chart)
+    schart
     return
 
 
