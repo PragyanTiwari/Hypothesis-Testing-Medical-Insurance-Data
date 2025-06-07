@@ -187,6 +187,7 @@ def _(mo, np, pd, stats):
 def _(
     alt,
     get_bootstrap_samples,
+    mo,
     normalweight_charges,
     obesity_charges,
     overweight_charges,
@@ -211,22 +212,151 @@ def _(
     })
 
     # Create the histogram
-    schart = alt.Chart(sdf).mark_bar(opacity=0.5, stroke='black').encode(
+    cat_distribution_chart = alt.Chart(sdf).mark_bar(opacity=0.7, stroke='black').encode(
         alt.X('value:Q', bin=alt.Bin(maxbins=30), title='Value'),
         alt.Y('count()', stack=None, title='Frequency'),
         alt.Color('category:N', title='BMI Category')
     ).properties(
         width=600,
-        height=300,
+        height=400,
         title='Bootstrapped Samples for each BMI Category'
+    ).configure_view(
+        strokeWidth=0
+    ).configure_title(
+        fontSize=20
     )
 
-    schart
+    mo.ui.altair_chart(cat_distribution_chart, label="Distribution of Bootstrapped Samples").center()
+    return (
+        normalweight_bootstrap_samples,
+        obesity_bootstrap_samples,
+        overweight_bootstrap_samples,
+    )
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        r"""
+    Why **bootstrapping**?? 
+
+    The Central Limit Theorem states that the mean samples of data regardless of its distribution will follow normality if the sample size is greater. Since, our data satisifies CLT, bootstrapping can place. 
+
+    > **From the Figure, we can say that the distribution is indeed normal on having samples 3000 for each `bmi_category`.**
+
+    Let's see other transformations...
+    """
+    )
     return
 
 
 @app.cell
-def _():
+def _(
+    normalweight_bootstrap_samples,
+    normalweight_charges,
+    np,
+    obesity_bootstrap_samples,
+    obesity_charges,
+    overweight_bootstrap_samples,
+    overweight_charges,
+    pd,
+    stats,
+):
+    from sklearn.preprocessing import (PowerTransformer,
+                                       QuantileTransformer,
+                                       FunctionTransformer)
+
+    # defining a function to generate default transformation to find the best fit for hypothesis
+    def build_transformations(col_name:str)->dict:
+        transformations = {
+            "log":FunctionTransformer(np.log).fit_transform(col_name),
+            "log10":FunctionTransformer(np.log10).fit_transform(col_name),
+            "log2":FunctionTransformer(np.log2).fit_transform(col_name),
+            "sqrt":FunctionTransformer(np.sqrt).fit_transform(col_name),
+            "pow2":FunctionTransformer(lambda x:x**2,).fit_transform(col_name),
+            "box-cox":PowerTransformer(method='box-cox',standardize=False).fit_transform(col_name.to_numpy().reshape(-1,1)).flatten(),
+            "yeo-john":PowerTransformer(method='yeo-johnson',standardize=False).fit_transform(col_name.to_numpy().reshape(-1,1)).flatten(),
+            "quantile":QuantileTransformer(n_quantiles=col_name.shape[0],output_distribution='normal').fit_transform(col_name.to_numpy().reshape(-1,1)).flatten()
+        }
+
+        return transformations
+
+
+    # transformations for all bmi categories
+
+    normal_weight_transformations = build_transformations(normalweight_charges)
+
+    over_weight_transformations = build_transformations(overweight_charges)
+
+    obesity_transformations = build_transformations(obesity_charges)
+
+    # function to calculate shaprio results for each bmi category transformation
+    get_shapiro_res = lambda transformation : list(map(lambda x: stats.shapiro(transformation[x])[0], transformation.keys()))
+
+    transformation_data = pd.DataFrame({'transformation':list(normal_weight_transformations.keys()),
+                           'normal_weight':get_shapiro_res(normal_weight_transformations),
+                           'over_weight':get_shapiro_res(over_weight_transformations),
+                           'obesity':get_shapiro_res(obesity_transformations)})
+
+    # appending the bootstrap shapiro results
+    transformation_data.loc[len(transformation_data)] = {'transformation':'bootstrap', 
+                                'normal_weight':stats.shapiro(normalweight_bootstrap_samples)[0],
+                                'over_weight':stats.shapiro(overweight_bootstrap_samples)[0],   
+                                'obesity':stats.shapiro(obesity_bootstrap_samples)[0]}
+
+    transformation_data
+    return (transformation_data,)
+
+
+@app.cell
+def _(alt, mo, transformation_data):
+    # Sample data (replace this with your actual DataFrame)
+    # transformation_data = pd.read_csv("your_data.csv")
+
+    # If you're using Jupyter or VSCode, enable Altair rendering
+    alt.data_transformers.disable_max_rows()
+
+    # Melt the data from wide to long format
+    transformed = transformation_data.melt(id_vars="transformation", 
+                            var_name="group",
+                            value_name = "normality_score")
+
+    # Title mapping (as in Seaborn)
+    title_map = {
+        "normal_weight": "normal weight charges",
+        "over_weight": "over weight charges",
+        "obesity": "obesity charges"
+    }
+
+    # Optional: Map group names to titles
+    transformed["group"] = transformed["group"].map(title_map)
+
+
+
+    # Create the Altair plot
+    normality_scores_dev_chart = alt.Chart(transformed).mark_circle(size=200, opacity=0.7, stroke="black").encode(
+        x=alt.X('normality_score:Q', title="normality_scores"),
+        y=alt.Y('transformation:N', title="transformation"),
+        color=alt.Color('group:N', legend=None),
+        tooltip=['transformation', 'normality_score']
+    ).properties(
+        height=450,
+        width=300
+    ).facet(
+        column=alt.Column('group:N', title=None, header=alt.Header(labelAngle=0))
+    ).configure_axis(
+        grid=True
+    ).configure_view(
+        stroke=None
+    )
+
+    mo.ui.altair_chart(normality_scores_dev_chart, label="Scores of Techniques around different Categories").center()
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r""">**`quantile transformation` & `bootstrapping` are the optimal transformation which pleases to have normal distribution. Since QuantileTransformer targets the normal distribution by measuring in quantiles such that the outliers get squeezed. Parametric-Estimators like `box-cox` & `yeo-johnson` expects the input data to be normally distributed, hence we can't rely on that. Basic log-transformations achieve good shapiro scores since didn't outperform bootstrapping.**""")
     return
 
 
