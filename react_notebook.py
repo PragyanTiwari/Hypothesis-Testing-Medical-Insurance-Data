@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.13.15"
+__generated_with = "0.13.11"
 app = marimo.App(width="full")
 
 
@@ -14,7 +14,7 @@ def _():
 def _(mo):
     mo.md(
         """
-    # 🧪**Overview of Hypothesis Testing**
+    # 🧪**Hypothesis Testing on Medical Insurance Dataset**
     ---
     #### A statistical method to evaluate whether data supports or contradicts a particular *Hypothesis*. In the context of the medical insurance dataset, we'll be exploring the relationships between various factors like age, bmi, smoker, medical charges etc.
 
@@ -305,7 +305,7 @@ def _(
                                 'obesity':stats.shapiro(obesity_bootstrap_samples)[0]}
 
     transformation_data
-    return (transformation_data,)
+    return normal_weight_transformations, transformation_data
 
 
 @app.cell
@@ -357,6 +357,81 @@ def _(alt, mo, transformation_data):
 @app.cell
 def _(mo):
     mo.md(r""">**`quantile transformation` & `bootstrapping` are the optimal transformation which pleases to have normal distribution. Since QuantileTransformer targets the normal distribution by measuring in quantiles such that the outliers get squeezed. Parametric-Estimators like `box-cox` & `yeo-johnson` expects the input data to be normally distributed, hence we can't rely on that. Basic log-transformations achieve good shapiro scores since didn't outperform bootstrapping.**""")
+    return
+
+
+@app.cell
+def _(mo, transformation_data):
+    mo.ui.radio.from_series(transformation_data['transformation'])
+    return
+
+
+@app.cell
+def _(normal_weight_transformations, normalweight_bootstrap_samples):
+    normal_weight_transformations['bootstrap'] = normalweight_bootstrap_samples
+    return
+
+
+@app.cell
+def _(alt, np, pd, stats):
+    def compute_theoretical_quantiles(n:int):
+        probs = (np.arange(1,n+1)-0.5)/n
+        return stats.norm.ppf(probs)
+
+
+    def generate_qq_plot(sample_quantiles,theoretical_quantiles,color:str):
+        temp_df = pd.DataFrame({
+            'Theoretical Quantiles': theoretical_quantiles,
+            'Sample Quantiles': np.sort(sample_quantiles)
+        })
+        scatter_plot = alt.Chart(temp_df).mark_point().encode(
+        x='Theoretical Quantiles',
+        y='Sample Quantiles'
+        ).properties(
+            width=400,
+            height=400,
+            title='Q-Q Plot'
+        )
+
+        # creating the reference line
+        min_q = min(sample_quantiles.min(), theoretical_quantiles.min())
+        max_q = max(sample_quantiles.max(), theoretical_quantiles.max())
+
+        ref_line = alt.Chart(pd.DataFrame({
+        'x': [min_q, max_q],
+        'y': [min_q, max_q]
+        })).mark_line(color='red').encode(
+            x='x',
+            y='y'
+        )
+    
+        # Final plot
+        qq_plot = scatter_plot + ref_line
+        return qq_plot
+
+    return compute_theoretical_quantiles, generate_qq_plot
+
+
+@app.cell
+def _(
+    compute_theoretical_quantiles,
+    generate_qq_plot,
+    normal_weight_transformations,
+):
+    tq = compute_theoretical_quantiles(len(normal_weight_transformations['log2']))
+
+    chartp = generate_qq_plot(normal_weight_transformations['log2'], tq, color="red")
+    return (chartp,)
+
+
+@app.cell
+def _(chartp):
+    chartp
+    return
+
+
+@app.cell
+def _():
     return
 
 
