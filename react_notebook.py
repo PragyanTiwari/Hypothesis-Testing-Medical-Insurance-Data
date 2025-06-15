@@ -362,7 +362,7 @@ def _(mo):
 
 @app.cell
 def _(mo, transformation_data):
-    mo.ui.radio.from_series(transformation_data['transformation'])
+    mo.ui.radio.from_series(transformation_data['transformation'], label="",inline=True).style(font="dd")
     return
 
 
@@ -374,19 +374,27 @@ def _(normal_weight_transformations, normalweight_bootstrap_samples):
 
 @app.cell
 def _(alt, np, pd, stats):
-    def compute_theoretical_quantiles(n:int):
-        probs = (np.arange(1,n+1)-0.5)/n
-        return stats.norm.ppf(probs)
+    def compute_theoretical_quantiles(n:int, sigma, mu):
+        """
+        generating the quantiles w.r.t. the size, std.dev, mean of the sample quantiles
+        """
+        probs = (np.arange(1,n+1)-0.5)/n # rank base probabilities
+        return stats.norm.ppf(probs) * sigma + mu
 
 
     def generate_qq_plot(sample_quantiles,theoretical_quantiles,color:str):
         temp_df = pd.DataFrame({
             'Theoretical Quantiles': theoretical_quantiles,
-            'Sample Quantiles': np.sort(sample_quantiles)
+            'Sample Quantiles': sample_quantiles
         })
-        scatter_plot = alt.Chart(temp_df).mark_point().encode(
-        x='Theoretical Quantiles',
-        y='Sample Quantiles'
+
+        min_q = min(sample_quantiles.min(), theoretical_quantiles.min())
+        max_q = max(sample_quantiles.max(), theoretical_quantiles.max())
+
+    
+        scatter_plot = alt.Chart(temp_df).mark_point(size=80,color='black').encode(
+        x=alt.X('Theoretical Quantiles', scale=alt.Scale(domain=(min_q, max_q))),
+        y=alt.Y('Sample Quantiles', scale=alt.Scale(domain=(min_q, max_q)))
         ).properties(
             width=400,
             height=400,
@@ -394,9 +402,6 @@ def _(alt, np, pd, stats):
         )
 
         # creating the reference line
-        min_q = min(sample_quantiles.min(), theoretical_quantiles.min())
-        max_q = max(sample_quantiles.max(), theoretical_quantiles.max())
-
         ref_line = alt.Chart(pd.DataFrame({
         'x': [min_q, max_q],
         'y': [min_q, max_q]
@@ -404,8 +409,8 @@ def _(alt, np, pd, stats):
             x='x',
             y='y'
         )
-    
-        # Final plot
+
+        # joining the plots
         qq_plot = scatter_plot + ref_line
         return qq_plot
 
@@ -417,16 +422,42 @@ def _(
     compute_theoretical_quantiles,
     generate_qq_plot,
     normal_weight_transformations,
+    np,
 ):
-    tq = compute_theoretical_quantiles(len(normal_weight_transformations['log2']))
+    sample_quantiles = np.sort(normal_weight_transformations['log2'])
+    sq_mean = np.mean(sample_quantiles)
+    sq_std_dev = np.std(sample_quantiles,ddof=1)
 
-    chartp = generate_qq_plot(normal_weight_transformations['log2'], tq, color="red")
-    return (chartp,)
+    tq = compute_theoretical_quantiles(n=len(sample_quantiles),
+                                       sigma=sq_std_dev,
+                                       mu=sq_mean)
+
+    chartp = generate_qq_plot(sample_quantiles, tq, color="red")
+    return chartp, sample_quantiles, tq
 
 
 @app.cell
 def _(chartp):
     chartp
+    return
+
+
+@app.cell
+def _(sample_quantiles, tq):
+    from sklearn.metrics import r2_score
+
+    score = r2_score(y_true=tq,y_pred=sample_quantiles)
+    score
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _():
     return
 
 
