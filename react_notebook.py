@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.13.11"
+__generated_with = "0.13.15"
 app = marimo.App(width="full")
 
 
@@ -391,7 +391,7 @@ def _(alt, np, pd, stats):
         min_q = min(sample_quantiles.min(), theoretical_quantiles.min())
         max_q = max(sample_quantiles.max(), theoretical_quantiles.max())
 
-    
+
         scatter_plot = alt.Chart(temp_df).mark_point(size=80,color='black').encode(
         x=alt.X('Theoretical Quantiles', scale=alt.Scale(domain=(min_q, max_q))),
         y=alt.Y('Sample Quantiles', scale=alt.Scale(domain=(min_q, max_q)))
@@ -433,7 +433,7 @@ def _(
                                        mu=sq_mean)
 
     chartp = generate_qq_plot(sample_quantiles, tq, color="red")
-    return chartp, sample_quantiles, tq
+    return (chartp,)
 
 
 @app.cell
@@ -443,21 +443,76 @@ def _(chartp):
 
 
 @app.cell
-def _(sample_quantiles, tq):
-    from sklearn.metrics import r2_score
+def _(alt, np, pd, stats):
+    import sklearn.metrics as metric
 
-    score = r2_score(y_true=tq,y_pred=sample_quantiles)
-    score
-    return
+    class GraphQQ:
+
+        def __init__(self, sample_data:pd.Series):
+            self.sample_quantiles = np.sort(sample_data)
+            self.theoretical_quantiles = self.compute_theoretical_quantiles(self.sample_quantiles)
+        
+
+        @staticmethod
+        def compute_theoretical_quantiles(sq):
+            """
+            getting the quantiles w.r.t. the size, std.dev, mean of the sample quantiles
+            """
+            n = len(sq)
+            sigma = np.std(sq,ddof=1)
+            mu = np.mean(sq)
+        
+            probs = (np.arange(1,n+1)-0.5)/n # rank base probabilities
+            return stats.norm.ppf(probs) * sigma + mu
+
+
+        def generate_qq_plot(self,category:str):
+            """
+            generate the required qq plot
+            """
+            temp_df = pd.DataFrame({
+                'Theoretical Quantiles': self.theoretical_quantiles,
+                'Sample Quantiles': self.sample_quantiles
+            })
+    
+            min_q = min(self.sample_quantiles.min(), self.theoretical_quantiles.min())
+            max_q = max(self.sample_quantiles.max(), self.theoretical_quantiles.max())
+    
+    
+            scatter_plot = alt.Chart(temp_df).mark_point(size=80,color='black').encode(
+            x=alt.X('Theoretical Quantiles', scale=alt.Scale(domain=(min_q, max_q))),
+            y=alt.Y('Sample Quantiles', scale=alt.Scale(domain=(min_q, max_q)))
+            ).properties(
+                width=400,
+                height=400,
+                title=category
+            )   
+            # creating the reference line
+            ref_line = alt.Chart(pd.DataFrame({
+            'x': [min_q, max_q],
+            'y': [min_q, max_q]
+            })).mark_line(color='red').encode(
+                x='x',
+                y='y'
+            )
+            # joining the plots
+            qq_plot = scatter_plot + ref_line
+            return qq_plot
+
+        def get_scores(self)->dict:
+            """scores to observe linear relationship"""
+            r2_score = metric.r2_score(y_true=self.theoretical_quantiles,y_pred=self.sample_quantiles)
+            mse = metric.mean_squared_error(y_true=self.theoretical_quantiles,y_pred=self.sample_quantiles)
+            mae = metric.mean_absolute_error(y_true=self.theoretical_quantiles,y_pred=self.sample_quantiles)
+            rmse = np.sqrt(mse)
+            return {"r2_score":r2_score, "mse":mse, "mae":mae, "rmse":rmse}
+    return (GraphQQ,)
 
 
 @app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
+def _(GraphQQ, normal_weight_transformations):
+    graph = GraphQQ(sample_data=normal_weight_transformations['log2'])
+    graph.generate_qq_plot(category="Normal Weight")
     return
 
 
