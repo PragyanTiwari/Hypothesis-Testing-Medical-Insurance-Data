@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.13.15"
+__generated_with = "0.13.11"
 app = marimo.App(width="full")
 
 
@@ -305,7 +305,12 @@ def _(
                                 'obesity':stats.shapiro(obesity_bootstrap_samples)[0]}
 
     transformation_data
-    return normal_weight_transformations, transformation_data
+    return (
+        normal_weight_transformations,
+        obesity_transformations,
+        over_weight_transformations,
+        transformation_data,
+    )
 
 
 @app.cell
@@ -367,91 +372,32 @@ def _(mo, transformation_data):
 
 
 @app.cell
-def _(normal_weight_transformations, normalweight_bootstrap_samples):
-    normal_weight_transformations['bootstrap'] = normalweight_bootstrap_samples
-    return
-
-
-@app.cell
-def _(alt, np, pd, stats):
-    def compute_theoretical_quantiles(n:int, sigma, mu):
-        """
-        generating the quantiles w.r.t. the size, std.dev, mean of the sample quantiles
-        """
-        probs = (np.arange(1,n+1)-0.5)/n # rank base probabilities
-        return stats.norm.ppf(probs) * sigma + mu
-
-
-    def generate_qq_plot(sample_quantiles,theoretical_quantiles,color:str):
-        temp_df = pd.DataFrame({
-            'Theoretical Quantiles': theoretical_quantiles,
-            'Sample Quantiles': sample_quantiles
-        })
-
-        min_q = min(sample_quantiles.min(), theoretical_quantiles.min())
-        max_q = max(sample_quantiles.max(), theoretical_quantiles.max())
-
-
-        scatter_plot = alt.Chart(temp_df).mark_point(size=80,color='black').encode(
-        x=alt.X('Theoretical Quantiles', scale=alt.Scale(domain=(min_q, max_q))),
-        y=alt.Y('Sample Quantiles', scale=alt.Scale(domain=(min_q, max_q)))
-        ).properties(
-            width=400,
-            height=400,
-            title='Q-Q Plot'
-        )
-
-        # creating the reference line
-        ref_line = alt.Chart(pd.DataFrame({
-        'x': [min_q, max_q],
-        'y': [min_q, max_q]
-        })).mark_line(color='red').encode(
-            x='x',
-            y='y'
-        )
-
-        # joining the plots
-        qq_plot = scatter_plot + ref_line
-        return qq_plot
-
-    return compute_theoretical_quantiles, generate_qq_plot
-
-
-@app.cell
 def _(
-    compute_theoretical_quantiles,
-    generate_qq_plot,
+    alt,
     normal_weight_transformations,
+    normalweight_bootstrap_samples,
     np,
+    obesity_bootstrap_samples,
+    obesity_transformations,
+    over_weight_transformations,
+    overweight_bootstrap_samples,
+    pd,
+    stats,
 ):
-    sample_quantiles = np.sort(normal_weight_transformations['log2'])
-    sq_mean = np.mean(sample_quantiles)
-    sq_std_dev = np.std(sample_quantiles,ddof=1)
-
-    tq = compute_theoretical_quantiles(n=len(sample_quantiles),
-                                       sigma=sq_std_dev,
-                                       mu=sq_mean)
-
-    chartp = generate_qq_plot(sample_quantiles, tq, color="red")
-    return (chartp,)
-
-
-@app.cell
-def _(chartp):
-    chartp
-    return
-
-
-@app.cell
-def _(alt, np, pd, stats):
     import sklearn.metrics as metric
+
+    normal_weight_transformations['bootstrap'] = normalweight_bootstrap_samples
+
+    over_weight_transformations['bootstrap'] = overweight_bootstrap_samples
+
+    obesity_transformations['bootstrap'] = obesity_bootstrap_samples
 
     class GraphQQ:
 
         def __init__(self, sample_data:pd.Series):
             self.sample_quantiles = np.sort(sample_data)
             self.theoretical_quantiles = self.compute_theoretical_quantiles(self.sample_quantiles)
-        
+
 
         @staticmethod
         def compute_theoretical_quantiles(sq):
@@ -461,12 +407,12 @@ def _(alt, np, pd, stats):
             n = len(sq)
             sigma = np.std(sq,ddof=1)
             mu = np.mean(sq)
-        
+
             probs = (np.arange(1,n+1)-0.5)/n # rank base probabilities
             return stats.norm.ppf(probs) * sigma + mu
 
 
-        def generate_qq_plot(self,category:str):
+        def generate_qq_plot(self, category:str):
             """
             generate the required qq plot
             """
@@ -474,11 +420,11 @@ def _(alt, np, pd, stats):
                 'Theoretical Quantiles': self.theoretical_quantiles,
                 'Sample Quantiles': self.sample_quantiles
             })
-    
+
             min_q = min(self.sample_quantiles.min(), self.theoretical_quantiles.min())
             max_q = max(self.sample_quantiles.max(), self.theoretical_quantiles.max())
-    
-    
+
+
             scatter_plot = alt.Chart(temp_df).mark_point(size=80,color='black').encode(
             x=alt.X('Theoretical Quantiles', scale=alt.Scale(domain=(min_q, max_q))),
             y=alt.Y('Sample Quantiles', scale=alt.Scale(domain=(min_q, max_q)))
@@ -505,7 +451,7 @@ def _(alt, np, pd, stats):
             mse = metric.mean_squared_error(y_true=self.theoretical_quantiles,y_pred=self.sample_quantiles)
             mae = metric.mean_absolute_error(y_true=self.theoretical_quantiles,y_pred=self.sample_quantiles)
             rmse = np.sqrt(mse)
-            return {"r2_score":r2_score, "mse":mse, "mae":mae, "rmse":rmse}
+            return {"R2 SCORE":r2_score, "MEAN SQ. ERROR":mse, "MEAN ABS. ERROR":mae, "ROOT MSE":rmse}
     return (GraphQQ,)
 
 
@@ -513,11 +459,26 @@ def _(alt, np, pd, stats):
 def _(GraphQQ, normal_weight_transformations):
     graph = GraphQQ(sample_data=normal_weight_transformations['log2'])
     graph.generate_qq_plot(category="Normal Weight")
+    return (graph,)
+
+
+@app.cell
+def _(graph, mo):
+    scores = graph.get_scores()
+
+    stats_lst = [mo.stat(label=name,value=scores[name],bordered=True,direction="increase") for name in scores]
+    return (stats_lst,)
+
+
+@app.cell
+def _(mo, stats_lst):
+    mo.hstack(stats_lst, justify="center",gap=1.4,align="center")
     return
 
 
 @app.cell
-def _():
+def _(stats_lst):
+    [20] + stats_lst
     return
 
 
