@@ -315,10 +315,7 @@ def _(
 
 @app.cell
 def _(alt, mo, transformation_data):
-    # Sample data (replace this with your actual DataFrame)
-    # transformation_data = pd.read_csv("your_data.csv")
 
-    # If you're using Jupyter or VSCode, enable Altair rendering
     alt.data_transformers.disable_max_rows()
 
     # Melt the data from wide to long format
@@ -366,12 +363,6 @@ def _(mo):
 
 
 @app.cell
-def _(mo, transformation_data):
-    mo.ui.radio.from_series(transformation_data['transformation'], label="",inline=True).style(font="dd")
-    return
-
-
-@app.cell
 def _(
     alt,
     normal_weight_transformations,
@@ -412,7 +403,7 @@ def _(
             return stats.norm.ppf(probs) * sigma + mu
 
 
-        def generate_qq_plot(self, category:str):
+        def generate_qq_plot(self, category:str, c:str):
             """
             generate the required qq plot
             """
@@ -425,12 +416,12 @@ def _(
             max_q = max(self.sample_quantiles.max(), self.theoretical_quantiles.max())
 
 
-            scatter_plot = alt.Chart(temp_df).mark_point(size=80,color='black').encode(
+            scatter_plot = alt.Chart(temp_df).mark_point(size=80,color=c).encode(
             x=alt.X('Theoretical Quantiles', scale=alt.Scale(domain=(min_q, max_q))),
             y=alt.Y('Sample Quantiles', scale=alt.Scale(domain=(min_q, max_q)))
             ).properties(
-                width=400,
-                height=400,
+                width=300,
+                height=200,
                 title=category
             )   
             # creating the reference line
@@ -456,10 +447,45 @@ def _(
 
 
 @app.cell
-def _(GraphQQ, normal_weight_transformations):
-    graph = GraphQQ(sample_data=normal_weight_transformations['log2'])
-    graph.generate_qq_plot(category="Normal Weight")
-    return (graph,)
+def _(mo, transformation_data):
+    # radio 
+    input_method = mo.ui.radio.from_series(transformation_data['transformation'],
+                                           label="Transformation Method:",
+                                           value="log10", inline=True)
+    input_method.center()
+    return (input_method,)
+
+
+@app.cell
+def _(
+    GraphQQ,
+    input_method,
+    mo,
+    normal_weight_transformations,
+    obesity_transformations,
+    over_weight_transformations,
+):
+    # graph objects for each category
+
+    normal_weight_graph_obj = GraphQQ(sample_data=normal_weight_transformations[input_method.value])
+    over_weight_graph_obj = GraphQQ(sample_data=over_weight_transformations[input_method.value])
+    obesity_graph_obj = GraphQQ(sample_data=obesity_transformations[input_method.value])
+
+    # graph stack
+    graph_stack = mo.hstack([
+        normal_weight_graph_obj.generate_qq_plot(category="Normal Weight Samples",c="#1f77b4"),
+        over_weight_graph_obj.generate_qq_plot(category="Over Weight Samples", c="dimgrey"),
+        obesity_graph_obj.generate_qq_plot(category="Obesity Samples", c="#7b68ee"),
+    ], align="center", justify="center")
+
+
+    return (graph_stack,)
+
+
+@app.cell
+def _(graph_stack):
+    graph_stack
+    return
 
 
 @app.cell
@@ -467,18 +493,18 @@ def _(graph, mo):
     scores = graph.get_scores()
 
     stats_lst = [mo.stat(label=name,value=scores[name],bordered=True,direction="increase") for name in scores]
+    mo.hstack(stats_lst, justify="center", gap=1.4, align="center")
     return (stats_lst,)
-
-
-@app.cell
-def _(mo, stats_lst):
-    mo.hstack(stats_lst, justify="center",gap=1.4,align="center")
-    return
 
 
 @app.cell
 def _(stats_lst):
     [20] + stats_lst
+    return
+
+
+@app.cell
+def _():
     return
 
 
