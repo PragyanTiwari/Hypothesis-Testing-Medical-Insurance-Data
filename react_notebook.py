@@ -1,7 +1,7 @@
 import marimo
 
 __generated_with = "0.13.11"
-app = marimo.App(width="full")
+app = marimo.App(width="full", html_head_file="head.html")
 
 
 @app.cell
@@ -56,7 +56,8 @@ def _(mo, pd):
     df.head()
 
     mo.md("""
-    Here is the Overview of *Medical Insurance Dataset 🏥*:
+    <br>
+    **Here is the Overview of Medical Insurance Dataset 🏥**:
 
     {data}
     """).batch(data=mo.ui.table(df, selection="multi-cell"))
@@ -94,8 +95,6 @@ def _(mo):
 
 @app.cell
 def _(alt, df, mo):
-    # frequency fo each category
-    print(df['bmi_category'].value_counts())
 
     chart = alt.Chart(df).mark_bar().encode(
         x=alt.X('bmi_category:N', title='BMI Category'),
@@ -118,7 +117,12 @@ def _(alt, df, mo):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""> **From the graph, Due to insufficient data points for the underweight category, we have excluded it from further analysis to ensure the reliability of our results.**""")
+    mo.md(
+        r"""
+    >**From the graph, Due to insufficient data points for the underweight category, we have excluded it from further analysis to ensure the reliability of our results**
+    <br>
+    """
+    )
     return
 
 
@@ -149,10 +153,10 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    mo.md("")
     mo.md(
-        """  
-    # 🛠️ **Data Transformation**
+        """
+    <br>
+    ## **🛠 Data Transformation: *Finding the optimal approach***
     ---
     """
     )
@@ -236,17 +240,15 @@ def _(
 
 @app.cell
 def _(mo):
-    mo.md(
+    mo.callout(mo.md(
         r"""
-    Why **bootstrapping**?? 
+    ### **Why bootstrapping**?? 
 
     The Central Limit Theorem states that the mean samples of data regardless of its distribution will follow normality if the sample size is greater. Since, our data satisifies CLT, bootstrapping can place. 
 
-    > **From the Figure, we can say that the distribution is indeed normal on having samples 3000 for each `bmi_category`.**
-
-    Let's see other transformations...
+    **From the Figure, we can say that the distribution is indeed normal on having samples 3000 for each `bmi_category`.**
     """
-    )
+    ), kind="info")
     return
 
 
@@ -358,7 +360,13 @@ def _(alt, mo, transformation_data):
 
 @app.cell
 def _(mo):
-    mo.md(r""">**`quantile transformation` & `bootstrapping` are the optimal transformation which pleases to have normal distribution. Since QuantileTransformer targets the normal distribution by measuring in quantiles such that the outliers get squeezed. Parametric-Estimators like `box-cox` & `yeo-johnson` expects the input data to be normally distributed, hence we can't rely on that. Basic log-transformations achieve good shapiro scores since didn't outperform bootstrapping.**""")
+    mo.md(
+        r"""
+    `quantile transformation` & `bootstrapping` are the optimal transformation which pleases to have normal distribution. Since QuantileTransformer targets the normal distribution by measuring in quantiles such that the outliers get squeezed. Parametric-Estimators like `box-cox` & `yeo-johnson` expects the input data to be normally distributed, hence we can't rely on that. Basic log-transformations achieve good shapiro scores since didn't outperform bootstrapping.
+    <br>
+    <br>
+    """
+    )
     return
 
 
@@ -436,28 +444,28 @@ def _(
             qq_plot = scatter_plot + ref_line
             return qq_plot
 
-        def get_scores(self)->dict:
+        @staticmethod
+        def get_scores(sq,tq)->dict:
             """scores to observe linear relationship"""
-            r2_score = metric.r2_score(y_true=self.theoretical_quantiles,y_pred=self.sample_quantiles)
-            mse = metric.mean_squared_error(y_true=self.theoretical_quantiles,y_pred=self.sample_quantiles)
-            mae = metric.mean_absolute_error(y_true=self.theoretical_quantiles,y_pred=self.sample_quantiles)
+            r2_score = metric.r2_score(y_true=tq,y_pred=sq)
+            mse = metric.mean_squared_error(y_true=tq,y_pred=sq)
+            mae = metric.mean_absolute_error(y_true=tq,y_pred=sq)
             rmse = np.sqrt(mse)
             return {"R2 SCORE":r2_score, "MEAN SQ. ERROR":mse, "MEAN ABS. ERROR":mae, "ROOT MSE":rmse}
     return (GraphQQ,)
 
 
 @app.cell
-def _(mo, transformation_data):
+def input_radio(mo, transformation_data):
     # radio 
     input_method = mo.ui.radio.from_series(transformation_data['transformation'],
                                            label="Transformation Method:",
                                            value="log10", inline=True)
-    input_method.center()
     return (input_method,)
 
 
 @app.cell
-def _(
+def graph_stack(
     GraphQQ,
     input_method,
     mo,
@@ -479,27 +487,60 @@ def _(
     ], align="center", justify="center")
 
 
-    return (graph_stack,)
+    return (
+        graph_stack,
+        normal_weight_graph_obj,
+        obesity_graph_obj,
+        over_weight_graph_obj,
+    )
 
 
 @app.cell
-def _(graph_stack):
-    graph_stack
+def score_stack(
+    mo,
+    normal_weight_graph_obj,
+    np,
+    obesity_graph_obj,
+    over_weight_graph_obj,
+):
+    # score stack
+
+    total_sq = np.concatenate([normal_weight_graph_obj.sample_quantiles,
+                    over_weight_graph_obj.sample_quantiles,
+                    obesity_graph_obj.sample_quantiles])
+
+    total_tq = np.concatenate([normal_weight_graph_obj.theoretical_quantiles,
+                    over_weight_graph_obj.theoretical_quantiles,
+                    obesity_graph_obj.theoretical_quantiles])
+
+    scores = normal_weight_graph_obj.get_scores(sq=total_sq,tq=total_tq) # any graph obj can be used
+
+    stats_lst = [mo.stat(label=name,value=scores[name],bordered=True,direction="increase") for name in scores]
+    scores_stack = mo.hstack(stats_lst, justify="center", gap=1.4, align="center")
+    return (scores_stack,)
+
+
+@app.cell
+def _(graph_stack, input_method, mo, scores_stack):
+    mo.vstack(items=[
+        input_method,
+        mo.md("<br>"),
+        graph_stack,
+        mo.md("<br>"),
+        scores_stack
+    ])
     return
 
 
 @app.cell
-def _(graph, mo):
-    scores = graph.get_scores()
-
-    stats_lst = [mo.stat(label=name,value=scores[name],bordered=True,direction="increase") for name in scores]
-    mo.hstack(stats_lst, justify="center", gap=1.4, align="center")
-    return (stats_lst,)
-
-
-@app.cell
-def _(stats_lst):
-    [20] + stats_lst
+def _(mo):
+    mo.md(
+        """
+    <br>
+    <br>
+    ## Experimentation
+    """
+    )
     return
 
 
